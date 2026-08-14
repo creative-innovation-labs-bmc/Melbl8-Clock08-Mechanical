@@ -14,15 +14,15 @@
   --face: #2d322f;
   --face-shadow: #242825;
   --hub: #8e9c9c;
-  --text: #ffffff;
   --text-soft: #bbc6c3;
   --stage-w: 3840px;
   --stage-h: 804px;
 
+  /* 5 rows x 3 columns per numeral. */
   --cell: 136px;
   --cell-gap: 12px;
-  --digit-gap: 44px;
-  --hero-gap: 84px;
+  --digit-gap: 64px;
+  --hero-gap: 76px;
   --hand-thickness: 20px;
   --hub-size: 16px;
 }
@@ -61,16 +61,23 @@ body {
   background: var(--bg);
 }
 
+/*
+  Production geometry at 3840 x 804:
+  digit = 432w x 728h
+  pair = 928w
+  full HH : MM : SS field = 3360w
+  leaves 240px on each side for the vertical metadata rails.
+*/
 .time-panel {
   position: absolute;
   left: 50%;
-  top: 34px;
+  top: 18px;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--hero-gap);
-  height: calc(var(--cell) * 3 + var(--cell-gap) * 2);
+  height: calc(var(--cell) * 5 + var(--cell-gap) * 4);
 }
 
 .time-group {
@@ -81,16 +88,27 @@ body {
 
 .digit {
   display: grid;
-  grid-template-columns: repeat(2, var(--cell));
-  grid-template-rows: repeat(3, var(--cell));
+  grid-template-columns: repeat(3, var(--cell));
+  grid-template-rows: repeat(5, var(--cell));
   gap: var(--cell-gap);
 }
 
+/* Two full-size colon clocks only, aligned to rows 2 and 4 of the 5-row grid. */
 .colon {
   position: relative;
   width: var(--cell);
-  height: calc(var(--cell) * 3 + var(--cell-gap) * 2);
+  height: calc(var(--cell) * 5 + var(--cell-gap) * 4);
   flex: 0 0 var(--cell);
+}
+.colon .clock-cell {
+  position: absolute;
+  left: 0;
+}
+.colon .clock-cell:first-child {
+  top: calc(var(--cell) + var(--cell-gap));
+}
+.colon .clock-cell:last-child {
+  top: calc((var(--cell) + var(--cell-gap)) * 3);
 }
 
 .clock-cell {
@@ -146,37 +164,28 @@ body {
 .clock-cell.is-active .hand { background: var(--active); }
 .clock-cell.is-inactive .hand { background: var(--inactive); }
 
-.colon .clock-cell {
-  position: absolute;
-  left: 0;
-}
-.colon .clock-cell:first-child { top: 0; }
-.colon .clock-cell:last-child { top: calc((var(--cell) + var(--cell-gap)) * 2); }
-
+/* Existing information moved to the very edges and rotated 90 degrees. */
 .edge-copy {
   position: absolute;
   top: 50%;
-  max-width: 740px;
+  width: 720px;
   white-space: nowrap;
-  font-size: 28px;
+  text-align: center;
+  font-size: 23px;
   line-height: 1;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: .01em;
   color: var(--text-soft);
-  opacity: .96;
+  opacity: .92;
   transform-origin: center center;
 }
 .edge-copy--left {
-  left: -176px;
+  left: -326px;
   transform: translateY(-50%) rotate(-90deg);
 }
 .edge-copy--right {
-  right: -176px;
+  right: -326px;
   transform: translateY(-50%) rotate(90deg);
-}
-.edge-copy strong {
-  color: var(--text);
-  font-weight: 700;
 }
 
 #debug {
@@ -185,7 +194,7 @@ body {
   bottom: 16px;
   z-index: 20;
   padding: 8px 10px;
-  background: rgba(0,0,0,0.55);
+  background: rgba(0,0,0,.55);
   color: #fff;
   font: 16px/1.3 monospace;
 }
