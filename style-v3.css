@@ -62,41 +62,17 @@ body {
   background: var(--bg);
 }
 
-.topline {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 18px;
-  z-index: 10;
-  pointer-events: none;
-}
-.topline__left,
-.topline__right {
-  font-size: 22px;
-  line-height: 1;
-  font-weight: 700;
-  letter-spacing: .01em;
-  color: var(--text);
-  white-space: nowrap;
-}
-.topline__right {
-  color: var(--text-soft);
-}
-
 /*
   3840 x 804 production geometry:
   - digit: 432 x 728
-  - two digits are deliberately separated to read H H / M M / S S
-  - only two full-size colon clocks sit between the pairs
+  - full HH : MM : SS field: 3320px wide
+  - 260px remains on each side for the rotated metadata rails
+  - vertical centring leaves 38px above and below the mechanical field
 */
 .time-panel {
   position: absolute;
   left: 50%;
-  top: 58px;
+  top: 38px;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
@@ -187,6 +163,31 @@ body {
 
 .clock-cell.is-active .hand { background: var(--active); }
 .clock-cell.is-inactive .hand { background: var(--inactive); }
+
+.edge-copy {
+  position: absolute;
+  top: 50%;
+  width: 720px;
+  white-space: nowrap;
+  text-align: center;
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: .01em;
+  color: var(--text-soft);
+  opacity: .9;
+  transform-origin: center center;
+  pointer-events: none;
+  z-index: 10;
+}
+.edge-copy--left {
+  left: -338px;
+  transform: translateY(-50%) rotate(-90deg);
+}
+.edge-copy--right {
+  right: -338px;
+  transform: translateY(-50%) rotate(90deg);
+}
 
 #debug {
   position: absolute;
