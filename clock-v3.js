@@ -5,21 +5,24 @@ const DISPLAY_H = 804;
 const TIME_ZONE = 'Australia/Melbourne';
 const INFO_LOCATION = 'Melbourne, Australia';
 const WEATHER_LOCATION = 'Docklands';
-const WEATHER_TEMP = new URLSearchParams(location.search).get('temp') || '17.4°';
-const WEATHER_TEXT = new URLSearchParams(location.search).get('weather') || 'Weather placeholder';
+const params = new URLSearchParams(location.search);
+const WEATHER_TEMP = params.get('temp') || '17.4°';
+const WEATHER_TEXT = params.get('weather') || 'Weather placeholder';
+const debugMode = params.get('debug') === '1';
 
-const DIGIT_ANGLES = [
-  [270,180,   0,180,   270,0,   90,180,   0,180,   90,0],
-  [180,180,   0,180,   0,0,     225,225,  225,225, 225,225],
-  [270,180,   270,0,   270,270, 90,90,    90,180,  90,0],
-  [270,180,   0,180,   270,0,   90,90,    90,90,   90,90],
-  [180,180,   0,180,   0,0,     180,180,  90,0,    225,225],
-  [270,270,   270,180, 270,0,   90,180,   90,0,    90,90],
-  [270,270,   270,180, 270,0,   90,180,   0,180,   90,0],
-  [270,180,   0,180,   0,0,     90,90,    225,225, 225,225],
-  [270,180,   270,0,   0,270,   90,180,   90,0,    0,90],
-  [270,180,   0,180,   0,0,     90,180,   90,0,    225,225]
-];
+/* 5 rows x 3 columns. 1 = active numeral module, 0 = parked grey module. */
+const DIGIT_PATTERNS = {
+  '0': ['111','101','101','101','111'],
+  '1': ['010','110','010','010','111'],
+  '2': ['111','001','111','100','111'],
+  '3': ['111','001','111','001','111'],
+  '4': ['101','101','111','001','001'],
+  '5': ['111','100','111','001','111'],
+  '6': ['111','100','111','101','111'],
+  '7': ['111','001','001','001','001'],
+  '8': ['111','101','111','101','111'],
+  '9': ['111','101','111','001','111']
+};
 
 const DATE_FORMATTER = new Intl.DateTimeFormat('en-AU', {
   timeZone: TIME_ZONE,
@@ -37,9 +40,6 @@ const TIME_FORMATTER = new Intl.DateTimeFormat('en-AU', {
   hourCycle: 'h23'
 });
 
-const params = new URLSearchParams(location.search);
-const debugMode = params.get('debug') === '1';
-
 const stage = document.getElementById('stage');
 const debug = document.getElementById('debug');
 const edgeLeft = document.getElementById('edge-left');
@@ -52,7 +52,7 @@ function fitStage() {
   stage.style.transform = `translate(-50%, -50%) scale(${scale})`;
   if (debugMode) {
     debug.hidden = false;
-    debug.textContent = `${window.innerWidth}x${window.innerHeight} | scale ${scale.toFixed(4)}`;
+    debug.textContent = `${window.innerWidth}x${window.innerHeight} | scale ${scale.toFixed(4)} | 5x3 digits`;
   }
 }
 window.addEventListener('resize', fitStage, { passive: true });
@@ -78,7 +78,7 @@ function createDigit() {
   const digit = document.createElement('div');
   digit.className = 'digit';
   digit._cells = [];
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 15; i++) {
     const cell = createClockCell();
     digit._cells.push(cell);
     digit.appendChild(cell);
@@ -104,6 +104,7 @@ function normaliseDelta(delta) {
 
 function setHand(hand, targetClockAngle, immediate = false) {
   const target = toCssAngle(targetClockAngle);
+
   if (!hand.ready) {
     hand.el.style.transition = 'none';
     hand.el.style.transform = `rotate(${hand.angle}deg)`;
@@ -126,26 +127,59 @@ function setHand(hand, targetClockAngle, immediate = false) {
   hand.el.style.transform = `rotate(${hand.angle}deg)`;
 }
 
-function setCellState(cell, angles, immediate = false) {
-  const active = !!angles;
+function isOn(pattern, row, col) {
+  return row >= 0 && row < 5 && col >= 0 && col < 3 && pattern[row][col] === '1';
+}
+
+function chooseDirections(pattern, row, col) {
+  if (!isOn(pattern, row, col)) return null;
+
+  const dirs = [];
+  if (isOn(pattern, row - 1, col)) dirs.push(0);
+  if (isOn(pattern, row, col + 1)) dirs.push(90);
+  if (isOn(pattern, row + 1, col)) dirs.push(180);
+  if (isOn(pattern, row, col - 1)) dirs.push(270);
+
+  if (dirs.length === 0) return [0, 180];
+  if (dirs.length === 1) return [dirs[0], dirs[0]];
+  if (dirs.length === 2) return dirs;
+
+  const hasVertical = dirs.includes(0) && dirs.includes(180);
+  const hasHorizontal = dirs.includes(90) && dirs.includes(270);
+  if (hasVertical && !hasHorizontal) return [0, 180];
+  if (hasHorizontal && !hasVertical) return [90, 270];
+
+  if (dirs.includes(0) && dirs.includes(90)) return [0, 90];
+  if (dirs.includes(90) && dirs.includes(180)) return [90, 180];
+  if (dirs.includes(180) && dirs.includes(270)) return [180, 270];
+  if (dirs.includes(270) && dirs.includes(0)) return [270, 0];
+
+  return [dirs[0], dirs[1]];
+}
+
+function applyCellState(cell, dirs, immediate = false) {
+  const active = !!dirs;
   cell.classList.toggle('is-active', active);
   cell.classList.toggle('is-inactive', !active);
-  const target = active ? angles : [0, 180];
+  const target = active ? dirs : [0, 180];
   setHand(cell._hands[0], target[0], immediate);
   setHand(cell._hands[1], target[1], immediate);
 }
 
 function setDigit(digitEl, value, immediate = false) {
-  const map = DIGIT_ANGLES[Number(value)];
-  for (let cellIndex = 0; cellIndex < 6; cellIndex++) {
-    setCellState(digitEl._cells[cellIndex], [map[cellIndex * 2], map[cellIndex * 2 + 1]], immediate);
+  const pattern = DIGIT_PATTERNS[value];
+  let index = 0;
+  for (let row = 0; row < 5; row++) {
+    for (let col = 0; col < 3; col++) {
+      applyCellState(digitEl._cells[index], chooseDirections(pattern, row, col), immediate);
+      index += 1;
+    }
   }
 }
 
 function setColon(colonEl, second, immediate = false) {
-  const vertical = second % 2 === 0;
-  const pair = vertical ? [0, 180] : [90, 270];
-  colonEl._cells.forEach(cell => setCellState(cell, pair, immediate));
+  const pair = second % 2 === 0 ? [0, 180] : [90, 270];
+  colonEl._cells.forEach(cell => applyCellState(cell, pair, immediate));
 }
 
 function getTimeParts() {
