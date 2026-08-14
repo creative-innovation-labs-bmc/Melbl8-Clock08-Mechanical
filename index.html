@@ -5,29 +5,36 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex" />
   <meta name="googlebot" content="noindex,nofollow,noarchive,nosnippet,noimageindex" />
-  <title>Melbl8 Clock08 Mechanical 5x3</title>
+  <title>Melbl8 Clock08 Mechanical</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body data-page="clock">
   <div id="viewport">
     <main id="stage" aria-label="Mechanical wall clock showing time">
-      <section id="time-panel" class="time-panel" aria-label="Time">
+      <header class="topbar" aria-label="Clock metadata">
+        <section class="meta-block meta-block--left">
+          <div class="meta-kicker">TIME</div>
+          <div id="meta-time" class="meta-line meta-line--primary">00:00:00</div>
+          <div id="meta-date" class="meta-line meta-line--secondary">Thursday 14 August 2026</div>
+        </section>
+        <section class="meta-block meta-block--right">
+          <div class="meta-kicker">LOCATION</div>
+          <div id="meta-location" class="meta-line meta-line--primary">Melbourne, Australia</div>
+          <div id="meta-weather" class="meta-line meta-line--secondary">Docklands · Weather placeholder</div>
+        </section>
+      </header>
+
+      <section id="time-panel" class="time-panel" aria-label="Mechanical HH MM SS time display">
         <div class="time-group" id="hours"></div>
-        <div class="colon" aria-hidden="true">
-          <span class="colon-clock"><i class="colon-hand"></i></span>
-          <span class="colon-clock"><i class="colon-hand"></i></span>
-        </div>
+        <div class="separator" id="sep-1" aria-hidden="true"></div>
         <div class="time-group" id="minutes"></div>
-        <div class="colon" aria-hidden="true">
-          <span class="colon-clock"><i class="colon-hand"></i></span>
-          <span class="colon-clock"><i class="colon-hand"></i></span>
-        </div>
+        <div class="separator" id="sep-2" aria-hidden="true"></div>
         <div class="time-group" id="seconds"></div>
       </section>
+
       <div id="debug" hidden></div>
     </main>
   </div>
-
   <script src="clock.js"></script>
 </body>
 </html>
