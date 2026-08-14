@@ -4,10 +4,19 @@
 
 ## Live pages
 
-- Circle version: https://creative-innovation-labs-bmc.github.io/Melbl8-Clock08-Mechanical/
-- Aurecon leaf version: https://creative-innovation-labs-bmc.github.io/Melbl8-Clock08-Mechanical/leaf.html
+- Clock: https://creative-innovation-labs-bmc.github.io/Melbl8-Clock08-Mechanical/
+- 5 × 3 numeral lab: https://creative-innovation-labs-bmc.github.io/Melbl8-Clock08-Mechanical/lab.html
 
-The circle page is the current default Enplug candidate. The leaf page uses the existing Clock02 Aurecon leaf silhouette embedded directly in `style.css`, so there is no runtime dependency on another repository.
+## Current direction
+
+- Pure `HH : MM : SS`
+- No day or location labels
+- Each numeral uses a 5 × 3 grid of analogue clock modules
+- Active hands use Aurecon Green `#89C925`
+- Parked/inactive hands use Aurecon Grey 2 `#4E5859`
+- Background remains Aurecon Grey `#373A36`
+- Parked mechanisms remain visible but visually recede
+- Melbourne timezone is set explicitly with `Intl.DateTimeFormat`
 
 ## Production goals
 
@@ -15,24 +24,17 @@ The circle page is the current default Enplug candidate. The leaf page uses the 
 - Pure HTML, CSS and JavaScript
 - No WebGL, framework, external font or continuous canvas render loop
 - Fixed production stage with automatic viewport scaling for browser/mobile QC
-- Explicit `Australia/Melbourne` timezone via `Intl.DateTimeFormat`
-- Only clock digits that change animate
+- Only digits that change animate each second
 - `noindex`, `nofollow`, `noarchive` plus `robots.txt` disallow
 
-## Layout
+## Numeral lab
 
-- Left: three-letter day abbreviation built from 3 × 5 mini mechanical clocks
-- Centre: `HH MM SS`, each digit built from a 2 × 3 array of analogue clock modules
-- Right: `MEL`, built from the same 3 × 5 mini-clock letterforms
+Use `lab.html` to review all ten 5 × 3 numeral forms before further tuning the live clock.
 
-The 3 × 5 side grid is intentional. A 3 × 3 alphabet is too ambiguous for reliable day/location reading at gallery distance.
+## Debug
 
-## Query switches
-
-- `?shape=leaf` or `?shape=circle`
-- `?side=0` hides day/location experiments
-- `?debug=1` shows viewport and scale information
+Add `?debug=1` to show viewport and scale information.
 
 ## Enplug
 
-Use the normal GitHub Pages URL as a Web Page App. No debug query string is required for production.
+Use the normal GitHub Pages clock URL as a Web Page App. No debug query string is required for production.
