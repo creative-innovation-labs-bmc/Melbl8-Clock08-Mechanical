@@ -1,2 +1,5 @@
 # Melbl8-Clock08-Mechanical
+
 Aurecon mechanical ClockClock-style wall clock for the 3840x804 Melbourne gallery screen, optimised for Enplug on NVIDIA Shield.
+
+Created by the private repository factory. See `PROJECT_BRIEF.md` for the build requirements.
