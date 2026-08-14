@@ -14,15 +14,16 @@
   --face: #2d322f;
   --face-shadow: #242825;
   --hub: #8e9c9c;
+  --text: #ffffff;
   --text-soft: #bbc6c3;
   --stage-w: 3840px;
   --stage-h: 804px;
 
-  /* 5 rows x 3 columns per numeral. */
+  /* Every numeral stays 3 columns x 5 rows. */
   --cell: 136px;
   --cell-gap: 12px;
-  --digit-gap: 64px;
-  --hero-gap: 76px;
+  --digit-gap: 88px;
+  --hero-gap: 96px;
   --hand-thickness: 20px;
   --hub-size: 16px;
 }
@@ -61,17 +62,41 @@ body {
   background: var(--bg);
 }
 
+.topline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  z-index: 10;
+  pointer-events: none;
+}
+.topline__left,
+.topline__right {
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: .01em;
+  color: var(--text);
+  white-space: nowrap;
+}
+.topline__right {
+  color: var(--text-soft);
+}
+
 /*
-  Production geometry at 3840 x 804:
-  digit = 432w x 728h
-  pair = 928w
-  full HH : MM : SS field = 3360w
-  leaves 240px on each side for the vertical metadata rails.
+  3840 x 804 production geometry:
+  - digit: 432 x 728
+  - two digits are deliberately separated to read H H / M M / S S
+  - only two full-size colon clocks sit between the pairs
 */
 .time-panel {
   position: absolute;
   left: 50%;
-  top: 18px;
+  top: 58px;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
@@ -93,7 +118,6 @@ body {
   gap: var(--cell-gap);
 }
 
-/* Two full-size colon clocks only, aligned to rows 2 and 4 of the 5-row grid. */
 .colon {
   position: relative;
   width: var(--cell);
@@ -163,30 +187,6 @@ body {
 
 .clock-cell.is-active .hand { background: var(--active); }
 .clock-cell.is-inactive .hand { background: var(--inactive); }
-
-/* Existing information moved to the very edges and rotated 90 degrees. */
-.edge-copy {
-  position: absolute;
-  top: 50%;
-  width: 720px;
-  white-space: nowrap;
-  text-align: center;
-  font-size: 23px;
-  line-height: 1;
-  font-weight: 600;
-  letter-spacing: .01em;
-  color: var(--text-soft);
-  opacity: .92;
-  transform-origin: center center;
-}
-.edge-copy--left {
-  left: -326px;
-  transform: translateY(-50%) rotate(-90deg);
-}
-.edge-copy--right {
-  right: -326px;
-  transform: translateY(-50%) rotate(90deg);
-}
 
 #debug {
   position: absolute;
