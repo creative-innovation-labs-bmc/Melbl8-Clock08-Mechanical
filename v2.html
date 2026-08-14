@@ -6,31 +6,27 @@
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex" />
   <meta name="googlebot" content="noindex,nofollow,noarchive,nosnippet,noimageindex" />
   <title>Melbl8 Clock08 Mechanical V2</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style-v3.css" />
 </head>
-<body data-page="clock" data-variant="v2">
+<body data-page="clock-v3">
   <div id="viewport">
     <main id="stage" aria-label="Mechanical wall clock V2">
       <header class="topline" aria-label="Clock metadata">
         <div id="topline-left" class="topline__left">00:00:00 · Friday 14 August 2026</div>
-        <div id="topline-right" class="topline__right">Melbourne, Australia · Docklands · 17.4°</div>
+        <div id="topline-right" class="topline__right">Docklands · 17.4° · Weather placeholder</div>
       </header>
-      <aside class="side-mech side-mech--left" aria-label="Day">
-        <div id="day-word" class="mechanical-word"></div>
-      </aside>
+
       <section class="time-panel" aria-label="Mechanical HH MM SS time display">
         <div class="time-group" id="hours"></div>
-        <div id="colon-1"></div>
+        <div id="colon-1" aria-hidden="true"></div>
         <div class="time-group" id="minutes"></div>
-        <div id="colon-2"></div>
+        <div id="colon-2" aria-hidden="true"></div>
         <div class="time-group" id="seconds"></div>
       </section>
-      <aside class="side-mech side-mech--right" aria-label="Location code">
-        <div id="location-word" class="mechanical-word"></div>
-      </aside>
+
       <div id="debug" hidden></div>
     </main>
   </div>
-  <script src="clock.js"></script>
+  <script src="clock-v3.js"></script>
 </body>
 </html>
