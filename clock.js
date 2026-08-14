@@ -5,8 +5,11 @@ const DISPLAY_H = 804;
 const TIME_ZONE = 'Australia/Melbourne';
 const INFO_LOCATION = 'Melbourne, Australia';
 const WEATHER_LOCATION = 'Docklands';
-const WEATHER_TEMP = new URLSearchParams(location.search).get('temp') || '17.4°';
-const WEATHER_TEXT = new URLSearchParams(location.search).get('weather') || 'Weather placeholder';
+
+const params = new URLSearchParams(location.search);
+const WEATHER_TEMP = params.get('temp') || '17.4°';
+const WEATHER_TEXT = params.get('weather') || 'Weather placeholder';
+const debugMode = params.get('debug') === '1';
 
 const DIGIT_PATTERNS = {
   '0': ['111','101','101','101','111'],
@@ -21,12 +24,37 @@ const DIGIT_PATTERNS = {
   '9': ['111','101','111','001','111']
 };
 
+const LETTER_PATTERNS = {
+  A: ['010','101','111','101','101'],
+  D: ['110','101','101','101','110'],
+  E: ['111','100','110','100','111'],
+  F: ['111','100','110','100','100'],
+  H: ['101','101','111','101','101'],
+  I: ['111','010','010','010','111'],
+  L: ['100','100','100','100','111'],
+  M: ['101','111','111','101','101'],
+  N: ['101','111','111','111','101'],
+  O: ['111','101','101','101','111'],
+  R: ['110','101','110','101','101'],
+  S: ['111','100','111','001','111'],
+  T: ['111','010','010','010','010'],
+  U: ['101','101','101','101','111'],
+  W: ['101','101','101','111','101']
+};
+
+const DAYS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+
 const DATE_FORMATTER = new Intl.DateTimeFormat('en-AU', {
   timeZone: TIME_ZONE,
   weekday: 'long',
   day: 'numeric',
   month: 'long',
   year: 'numeric'
+});
+
+const DAY_FORMATTER = new Intl.DateTimeFormat('en-AU', {
+  timeZone: TIME_ZONE,
+  weekday: 'short'
 });
 
 const TIME_FORMATTER = new Intl.DateTimeFormat('en-AU', {
@@ -37,18 +65,16 @@ const TIME_FORMATTER = new Intl.DateTimeFormat('en-AU', {
   hourCycle: 'h23'
 });
 
-const params = new URLSearchParams(location.search);
-const debugMode = params.get('debug') === '1';
-
 const stage = document.getElementById('stage');
 const debug = document.getElementById('debug');
 const currentDigits = ['', '', '', '', '', ''];
+let currentDay = '';
 let lastSecond = -1;
 
 function fitStage() {
   const scale = Math.min(window.innerWidth / DISPLAY_W, window.innerHeight / DISPLAY_H);
   stage.style.transform = `translate(-50%, -50%) scale(${scale})`;
-  if (debugMode) {
+  if (debugMode && debug) {
     debug.hidden = false;
     debug.textContent = `${window.innerWidth}x${window.innerHeight} | scale ${scale.toFixed(4)}`;
   }
@@ -84,16 +110,12 @@ function createDigit() {
   return digit;
 }
 
-function createSeparator() {
-  const sep = document.createElement('div');
-  sep.className = 'separator';
-  sep._cells = [];
-  for (let i = 0; i < 5; i++) {
-    const cell = createClockCell();
-    sep._cells.push(cell);
-    sep.appendChild(cell);
-  }
-  return sep;
+function createColon() {
+  const colon = document.createElement('div');
+  colon.className = 'colon';
+  colon._cells = [createClockCell(), createClockCell()];
+  colon.append(...colon._cells);
+  return colon;
 }
 
 function toCssAngle(clockAngle) {
@@ -134,7 +156,6 @@ function isOn(pattern, row, col) {
 
 function chooseDirections(pattern, row, col) {
   if (!isOn(pattern, row, col)) return null;
-
   const dirs = [];
   if (isOn(pattern, row - 1, col)) dirs.push(0);
   if (isOn(pattern, row, col + 1)) dirs.push(90);
@@ -154,8 +175,28 @@ function chooseDirections(pattern, row, col) {
   if (dirs.includes(90) && dirs.includes(180)) return [90, 180];
   if (dirs.includes(180) && dirs.includes(270)) return [180, 270];
   if (dirs.includes(270) && dirs.includes(0)) return [270, 0];
-
   return [dirs[0], dirs[1]];
+}
+
+function letterDirections(char, pattern, row, col) {
+  const base = chooseDirections(pattern, row, col);
+  if (!base) return null;
+
+  if (char === 'M') {
+    if (row === 0 && col === 0) return [180, 135];
+    if (row === 0 && col === 2) return [180, 225];
+    if (row === 1 && col === 1) return [315, 45];
+  }
+  if (char === 'W') {
+    if (row === 3 && col === 0) return [0, 135];
+    if (row === 3 && col === 2) return [0, 225];
+    if (row === 3 && col === 1) return [315, 45];
+  }
+  if (char === 'R') {
+    if (row === 2 && col === 1) return [270, 135];
+    if (row === 3 && col === 2) return [315, 180];
+  }
+  return base;
 }
 
 function applyCellState(cell, dirs, immediate = false) {
@@ -167,50 +208,68 @@ function applyCellState(cell, dirs, immediate = false) {
   setHand(cell._hands[1], target[1], immediate);
 }
 
-function setDigit(digitEl, value, immediate = false) {
-  const pattern = DIGIT_PATTERNS[value];
+function setPatternCells(cells, pattern, immediate = false, char = '') {
   let index = 0;
   for (let row = 0; row < 5; row++) {
     for (let col = 0; col < 3; col++) {
-      const dirs = chooseDirections(pattern, row, col);
-      applyCellState(digitEl._cells[index], dirs, immediate);
+      const dirs = char ? letterDirections(char, pattern, row, col) : chooseDirections(pattern, row, col);
+      applyCellState(cells[index], dirs, immediate);
       index += 1;
     }
   }
 }
 
-function setSeparator(sepEl, second, immediate = false) {
-  const activeRows = new Set([1, 3]);
-  const activeDirs = second % 2 === 0 ? [0, 180] : [90, 270];
-  sepEl._cells.forEach((cell, index) => {
-    applyCellState(cell, activeRows.has(index) ? activeDirs : null, immediate);
-  });
+function setDigit(digitEl, value, immediate = false) {
+  setPatternCells(digitEl._cells, DIGIT_PATTERNS[value], immediate);
+}
+
+function createMechanicalLetter(char) {
+  const letter = document.createElement('div');
+  letter.className = 'mechanical-letter';
+  letter._cells = [];
+  for (let i = 0; i < 15; i++) {
+    const cell = createClockCell();
+    letter._cells.push(cell);
+    letter.appendChild(cell);
+  }
+  const pattern = LETTER_PATTERNS[char] || LETTER_PATTERNS.O;
+  setPatternCells(letter._cells, pattern, true, char);
+  return letter;
+}
+
+function renderMechanicalWord(container, word) {
+  if (!container || container._word === word) return;
+  container._word = word;
+  container.replaceChildren();
+  [...word].forEach((char) => container.appendChild(createMechanicalLetter(char)));
+}
+
+function setColon(colon, second, immediate = false) {
+  const dirs = second % 2 === 0 ? [0, 180] : [90, 270];
+  colon._cells.forEach((cell) => applyCellState(cell, dirs, immediate));
 }
 
 function getTimeParts() {
-  const timeParts = TIME_FORMATTER.formatToParts(new Date());
+  const now = new Date();
+  const timeParts = TIME_FORMATTER.formatToParts(now);
   const values = Object.create(null);
   for (const part of timeParts) {
     if (part.type !== 'literal') values[part.type] = part.value;
   }
   return {
+    date: now,
     hh: values.hour.padStart(2, '0'),
     mm: values.minute.padStart(2, '0'),
-    ss: values.second.padStart(2, '0')
+    ss: values.second.padStart(2, '0'),
+    day: DAY_FORMATTER.format(now).toUpperCase().slice(0, 3)
   };
 }
 
-function updateMeta(now) {
-  const metaTime = document.getElementById('meta-time');
-  const metaDate = document.getElementById('meta-date');
-  const metaLocation = document.getElementById('meta-location');
-  const metaWeather = document.getElementById('meta-weather');
-  if (!metaTime) return;
-
-  metaTime.textContent = `${now.hh}:${now.mm}:${now.ss}`;
-  metaDate.textContent = DATE_FORMATTER.format(new Date());
-  metaLocation.textContent = INFO_LOCATION;
-  metaWeather.textContent = `${WEATHER_LOCATION} · ${WEATHER_TEMP} · ${WEATHER_TEXT}`;
+function updateTopline(now) {
+  const left = document.getElementById('topline-left');
+  const right = document.getElementById('topline-right');
+  if (left) left.innerHTML = `<strong>${now.hh}:${now.mm}:${now.ss}</strong> · ${DATE_FORMATTER.format(now.date)}`;
+  if (right) right.innerHTML = `<strong>${INFO_LOCATION}</strong> · ${WEATHER_LOCATION} · ${WEATHER_TEMP} · ${WEATHER_TEXT}`;
 }
 
 function buildClockPage() {
@@ -224,13 +283,17 @@ function buildClockPage() {
     }
   });
 
-  const separators = [];
-  ['sep-1', 'sep-2'].forEach((id) => {
+  const colons = [];
+  ['colon-1', 'colon-2'].forEach((id) => {
     const mount = document.getElementById(id);
-    const sep = createSeparator();
-    mount.replaceWith(sep);
-    separators.push(sep);
+    const colon = createColon();
+    mount.replaceWith(colon);
+    colons.push(colon);
   });
+
+  const dayMount = document.getElementById('day-word');
+  const locationMount = document.getElementById('location-word');
+  if (locationMount) renderMechanicalWord(locationMount, 'MEL');
 
   function updateClock(force = false) {
     const now = getTimeParts();
@@ -243,11 +306,16 @@ function buildClockPage() {
       }
     }
 
+    if (force || currentDay !== now.day) {
+      currentDay = now.day;
+      if (dayMount) renderMechanicalWord(dayMount, currentDay);
+    }
+
     const second = Number(now.ss);
     if (force || second !== lastSecond) {
       lastSecond = second;
-      separators.forEach((sep) => setSeparator(sep, second, force));
-      updateMeta(now);
+      colons.forEach((colon) => setColon(colon, second, force));
+      updateTopline(now);
     }
   }
 
@@ -263,6 +331,7 @@ function buildClockPage() {
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) {
       lastSecond = -1;
+      currentDay = '';
       currentDigits.fill('');
       updateClock(false);
     }
@@ -284,8 +353,24 @@ function buildLabPage() {
   });
 }
 
-if (document.body.dataset.page === 'lab') {
-  buildLabPage();
-} else {
-  buildClockPage();
+function buildDaysPage() {
+  const grid = document.getElementById('day-lab-grid');
+  DAYS.forEach((day) => {
+    const card = document.createElement('article');
+    card.className = 'day-card';
+    const word = document.createElement('div');
+    word.className = 'mechanical-word';
+    renderMechanicalWord(word, day);
+    const label = document.createElement('div');
+    label.className = 'day-card__label';
+    label.textContent = day;
+    card.append(word, label);
+    grid.appendChild(card);
+  });
+}
+
+switch (document.body.dataset.page) {
+  case 'lab': buildLabPage(); break;
+  case 'days': buildDaysPage(); break;
+  default: buildClockPage();
 }
