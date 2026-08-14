@@ -3,7 +3,6 @@
 const DISPLAY_W = 3840;
 const DISPLAY_H = 804;
 const TIME_ZONE = 'Australia/Melbourne';
-const INFO_LOCATION = 'Melbourne, Australia';
 const WEATHER_LOCATION = 'Docklands';
 const params = new URLSearchParams(location.search);
 const WEATHER_TEMP = params.get('temp') || '17.4°';
@@ -42,8 +41,8 @@ const TIME_FORMATTER = new Intl.DateTimeFormat('en-AU', {
 
 const stage = document.getElementById('stage');
 const debug = document.getElementById('debug');
-const edgeLeft = document.getElementById('edge-left');
-const edgeRight = document.getElementById('edge-right');
+const topLeft = document.getElementById('topline-left');
+const topRight = document.getElementById('topline-right');
 const currentDigits = ['', '', '', '', '', ''];
 let lastSecond = -1;
 
@@ -195,9 +194,9 @@ function getTimeParts() {
   };
 }
 
-function updateEdgeText(now) {
-  edgeLeft.textContent = `${now.hh}:${now.mm}:${now.ss} · ${DATE_FORMATTER.format(new Date())}`;
-  edgeRight.textContent = `${INFO_LOCATION} · ${WEATHER_LOCATION} · ${WEATHER_TEMP} · ${WEATHER_TEXT}`;
+function updateTopline(now) {
+  topLeft.textContent = `${now.hh}:${now.mm}:${now.ss} · ${DATE_FORMATTER.format(new Date())}`;
+  topRight.textContent = `${WEATHER_LOCATION} · ${WEATHER_TEMP} · ${WEATHER_TEXT}`;
 }
 
 function buildClockPage() {
@@ -234,7 +233,7 @@ function buildClockPage() {
     if (force || second !== lastSecond) {
       lastSecond = second;
       colons.forEach(colon => setColon(colon, second, force));
-      updateEdgeText(now);
+      updateTopline(now);
     }
   }
 
