@@ -28,8 +28,10 @@ const TIME_FORMATTER = new Intl.DateTimeFormat('en-AU', {
 });
 
 // 0° = 12 o'clock, 90° = 3 o'clock, 180° = 6 o'clock, 270° = 9 o'clock.
-// Each row contains six clock cells in row-major order, two hand angles per cell.
-// The mapping follows the established ClockClock 2x3 construction.
+// Each digit map stores six clock cells in the ClockClock source order:
+// right column top-to-bottom, then left column top-to-bottom. Each cell has two hand angles.
+// The DOM itself is row-major, so DIGIT_SOURCE_ORDER remaps the source pairs when rendering.
+const DIGIT_SOURCE_ORDER = [3, 0, 4, 1, 5, 2]; // DOM: TL, TR, ML, MR, BL, BR
 const DIGIT_ANGLES = [
   [270,180,   0,180,   270,0,   90,180,   0,180,   90,0],   // 0
   [180,180,   0,180,   0,0,     225,225,  225,225,  225,225],// 1
@@ -171,8 +173,9 @@ function setDigit(index, value, immediate = false) {
   const digit = digitEls[index];
   for (let cellIndex = 0; cellIndex < 6; cellIndex++) {
     const cell = digit._cells[cellIndex];
-    setHand(cell._hands[0], map[cellIndex * 2], immediate);
-    setHand(cell._hands[1], map[cellIndex * 2 + 1], immediate);
+    const sourceCell = DIGIT_SOURCE_ORDER[cellIndex];
+    setHand(cell._hands[0], map[sourceCell * 2], immediate);
+    setHand(cell._hands[1], map[sourceCell * 2 + 1], immediate);
   }
 }
 
