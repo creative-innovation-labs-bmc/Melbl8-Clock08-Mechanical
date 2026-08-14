@@ -3,13 +3,10 @@
 const DISPLAY_W = 3840;
 const DISPLAY_H = 804;
 const TIME_ZONE = 'Australia/Melbourne';
-const TIME_FORMATTER = new Intl.DateTimeFormat('en-AU', {
-  timeZone: TIME_ZONE,
-  hour: '2-digit',
-  minute: '2-digit',
-  second: '2-digit',
-  hourCycle: 'h23'
-});
+const INFO_LOCATION = 'Melbourne, Australia';
+const WEATHER_LOCATION = 'Docklands';
+const WEATHER_TEMP = new URLSearchParams(location.search).get('temp') || '17.4°';
+const WEATHER_TEXT = new URLSearchParams(location.search).get('weather') || 'Weather placeholder';
 
 const DIGIT_PATTERNS = {
   '0': ['111','101','101','101','111'],
@@ -23,6 +20,22 @@ const DIGIT_PATTERNS = {
   '8': ['111','101','111','101','111'],
   '9': ['111','101','111','001','111']
 };
+
+const DATE_FORMATTER = new Intl.DateTimeFormat('en-AU', {
+  timeZone: TIME_ZONE,
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric'
+});
+
+const TIME_FORMATTER = new Intl.DateTimeFormat('en-AU', {
+  timeZone: TIME_ZONE,
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23'
+});
 
 const params = new URLSearchParams(location.search);
 const debugMode = params.get('debug') === '1';
@@ -71,6 +84,18 @@ function createDigit() {
   return digit;
 }
 
+function createSeparator() {
+  const sep = document.createElement('div');
+  sep.className = 'separator';
+  sep._cells = [];
+  for (let i = 0; i < 5; i++) {
+    const cell = createClockCell();
+    sep._cells.push(cell);
+    sep.appendChild(cell);
+  }
+  return sep;
+}
+
 function toCssAngle(clockAngle) {
   return clockAngle - 90;
 }
@@ -81,7 +106,6 @@ function normaliseDelta(delta) {
 
 function setHand(hand, targetClockAngle, immediate = false) {
   const target = toCssAngle(targetClockAngle);
-
   if (!hand.ready) {
     hand.el.style.transition = 'none';
     hand.el.style.transform = `rotate(${hand.angle}deg)`;
@@ -155,19 +179,43 @@ function setDigit(digitEl, value, immediate = false) {
   }
 }
 
-function animateColon(second) {
-  const vertical = second % 2 === 0;
-  document.querySelectorAll('.colon-hand').forEach((hand, i) => {
-    const topBottomPhase = i % 2 === 0 ? 0 : 180;
-    const angle = vertical ? topBottomPhase : 90 + topBottomPhase;
-    hand.style.transform = `rotate(${angle - 90}deg)`;
-    hand.style.opacity = vertical ? '0.96' : '0.72';
+function setSeparator(sepEl, second, immediate = false) {
+  const activeRows = new Set([1, 3]);
+  const activeDirs = second % 2 === 0 ? [0, 180] : [90, 270];
+  sepEl._cells.forEach((cell, index) => {
+    applyCellState(cell, activeRows.has(index) ? activeDirs : null, immediate);
   });
+}
+
+function getTimeParts() {
+  const timeParts = TIME_FORMATTER.formatToParts(new Date());
+  const values = Object.create(null);
+  for (const part of timeParts) {
+    if (part.type !== 'literal') values[part.type] = part.value;
+  }
+  return {
+    hh: values.hour.padStart(2, '0'),
+    mm: values.minute.padStart(2, '0'),
+    ss: values.second.padStart(2, '0')
+  };
+}
+
+function updateMeta(now) {
+  const metaTime = document.getElementById('meta-time');
+  const metaDate = document.getElementById('meta-date');
+  const metaLocation = document.getElementById('meta-location');
+  const metaWeather = document.getElementById('meta-weather');
+  if (!metaTime) return;
+
+  metaTime.textContent = `${now.hh}:${now.mm}:${now.ss}`;
+  metaDate.textContent = DATE_FORMATTER.format(new Date());
+  metaLocation.textContent = INFO_LOCATION;
+  metaWeather.textContent = `${WEATHER_LOCATION} · ${WEATHER_TEMP} · ${WEATHER_TEXT}`;
 }
 
 function buildClockPage() {
   const digitEls = [];
-  ['hours', 'minutes', 'seconds'].forEach(id => {
+  ['hours', 'minutes', 'seconds'].forEach((id) => {
     const group = document.getElementById(id);
     for (let i = 0; i < 2; i++) {
       const digit = createDigit();
@@ -176,16 +224,17 @@ function buildClockPage() {
     }
   });
 
+  const separators = [];
+  ['sep-1', 'sep-2'].forEach((id) => {
+    const mount = document.getElementById(id);
+    const sep = createSeparator();
+    mount.replaceWith(sep);
+    separators.push(sep);
+  });
+
   function updateClock(force = false) {
-    const parts = TIME_FORMATTER.formatToParts(new Date());
-    const values = Object.create(null);
-    for (const part of parts) {
-      if (part.type !== 'literal') values[part.type] = part.value;
-    }
-    const hh = values.hour.padStart(2, '0');
-    const mm = values.minute.padStart(2, '0');
-    const ss = values.second.padStart(2, '0');
-    const six = `${hh}${mm}${ss}`;
+    const now = getTimeParts();
+    const six = `${now.hh}${now.mm}${now.ss}`;
 
     for (let i = 0; i < 6; i++) {
       if (force || currentDigits[i] !== six[i]) {
@@ -194,10 +243,11 @@ function buildClockPage() {
       }
     }
 
-    const second = Number(ss);
+    const second = Number(now.ss);
     if (force || second !== lastSecond) {
       lastSecond = second;
-      animateColon(lastSecond);
+      separators.forEach((sep) => setSeparator(sep, second, force));
+      updateMeta(now);
     }
   }
 
