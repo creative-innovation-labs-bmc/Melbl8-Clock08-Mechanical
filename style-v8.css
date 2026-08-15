@@ -1,0 +1,7 @@
+@import url('style-v7.css');
+
+/* During the five-minute installation moment every mechanical hand is green,
+   even while the underlying V7 clock continues maintaining live time state. */
+body.v8-installation .clock-cell .hand {
+  background: var(--active) !important;
+}
