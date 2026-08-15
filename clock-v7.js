@@ -9,9 +9,9 @@ const WEATHER_TEMP = params.get('temp') || '17.4°';
 const WEATHER_TEXT = params.get('weather') || 'Weather placeholder';
 const debugMode = params.get('debug') === '1';
 
-// V7 keeps the V6 travelling-gust character but uses the V5 motion rate.
-const WIND_TICK_MS = 700;
-const WIND_TURN_MS = 2600;
+// V7 2x: double the gust field rate and halve the grey-hand update/ease timings.
+const WIND_TICK_MS = 350;
+const WIND_TURN_MS = 1300;
 const ACTIVE_TURN_MS = 760;
 
 const DIGIT_PATTERNS = {
@@ -49,7 +49,7 @@ function fitStage() {
   stage.style.transform = `translate(-50%, -50%) scale(${scale})`;
   if (debugMode) {
     debug.hidden = false;
-    debug.textContent = `${window.innerWidth}x${window.innerHeight} | scale ${scale.toFixed(4)} | V7 gust wave fast`;
+    debug.textContent = `${window.innerWidth}x${window.innerHeight} | scale ${scale.toFixed(4)} | V7 gust wave 2x`;
   }
 }
 window.addEventListener('resize', fitStage, { passive: true });
@@ -155,11 +155,12 @@ function chooseDirections(pattern, row, col) {
 }
 
 function windAngle(cell, seconds) {
-  const drift = seconds * 1.8;
-  const broadWave = 26 * Math.sin(seconds * 0.34 - cell._windX * 0.30);
-  const crossWave = 8 * Math.sin(seconds * 0.52 + cell._windY * 0.68 + cell._windPhase);
-  const gustEnvelope = Math.pow((Math.sin(seconds * 0.17 - cell._windX * 0.10) + 1) * 0.5, 2);
-  const travellingGust = 34 * gustEnvelope * Math.sin(seconds * 0.78 - cell._windX * 0.48);
+  // V6: a calmer base drift with stronger coherent gusts sweeping left-to-right.
+  const drift = seconds * 3.6;
+  const broadWave = 26 * Math.sin(seconds * 0.68 - cell._windX * 0.30);
+  const crossWave = 8 * Math.sin(seconds * 1.04 + cell._windY * 0.68 + cell._windPhase);
+  const gustEnvelope = Math.pow((Math.sin(seconds * 0.34 - cell._windX * 0.10) + 1) * 0.5, 2);
+  const travellingGust = 34 * gustEnvelope * Math.sin(seconds * 1.56 - cell._windX * 0.48);
   return drift + broadWave + crossWave + travellingGust;
 }
 
