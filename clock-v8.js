@@ -1,19 +1,26 @@
 'use strict';
 
-// V8 layers a five-minute installation moment on top of the proven V7 clock.
-// Normal behaviour remains V7. At :00, :05, :10, etc, all mechanical hands
-// become green for 15 seconds and spin as a fast travelling gust. During the
-// final second they resolve into the time that will be correct at the end.
+// V8 layers a five-minute installation moment on top of V7.
+// Normal behaviour remains V7. At :00, :05, :10, etc, every hand turns green
+// for 10 seconds. A single linked gust travels across the wall and each clock
+// performs the same gentle rotation with a position-based delay, so the wind
+// direction reads clearly rather than as unrelated spinning.
 
 const V8_TIME_ZONE = 'Australia/Melbourne';
 const V8_PARAMS = new URLSearchParams(location.search);
 const V8_DEMO = V8_PARAMS.get('demo') === '1';
-const V8_DURATION_MS = 15000;
-const V8_RESOLVE_AT_MS = 14000;
-const V8_TICK_MS = 250;
-const V8_SPIN_STEP = 155;
-const V8_SPIN_EASE_MS = 430;
-const V8_RESOLVE_MS = 900;
+const V8_DIRECTION = ['ltr', 'rtl', 'ttb', 'btt'].includes(V8_PARAMS.get('dir'))
+  ? V8_PARAMS.get('dir')
+  : 'ltr';
+
+const V8_DURATION_MS = 10000;
+const V8_RESOLVE_AT_MS = 8500;
+const V8_TICK_MS = 120;
+const V8_GUST_TRAVEL_MS = 1800;
+const V8_CELL_SPIN_MS = 6200;
+const V8_ROTATION_DEG = 360;
+const V8_SPIN_EASE_MS = 260;
+const V8_RESOLVE_MS = 1200;
 const V8_DEMO_START = performance.now();
 
 const V8_TIME_FORMATTER = new Intl.DateTimeFormat('en-AU', {
@@ -37,6 +44,7 @@ const V8_PATTERNS = {
 let v8Active = false;
 let v8Resolving = false;
 let v8Start = 0;
+let v8ResolveTarget = null;
 
 function v8Parts(date = new Date()) {
   const values = Object.create(null);
@@ -59,13 +67,21 @@ function v8Window() {
   const now = v8Parts();
   const second = Number(now.ss);
   return {
-    active: Number(now.mm) % 5 === 0 && second < 15,
+    active: Number(now.mm) % 5 === 0 && second < 10,
     elapsed: second * 1000 + (Date.now() % 1000)
   };
 }
 
 function v8Cells() {
   return Array.from(document.querySelectorAll('.clock-cell'));
+}
+
+function v8Clamp(value, min = 0, max = 1) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function v8EaseInOutSine(t) {
+  return -(Math.cos(Math.PI * t) - 1) / 2;
 }
 
 function v8NormaliseDelta(delta) {
@@ -82,11 +98,10 @@ function v8SetHand(hand, clockAngle, duration) {
   hand.el.style.transform = `rotate(${hand.angle}deg)`;
 }
 
-function v8SpinHand(hand, delta) {
+function v8DriveHand(hand, cssAngle) {
   if (!hand) return;
   hand.ready = true;
-  if (!Number.isFinite(hand.angle)) hand.angle = 0;
-  hand.angle += delta;
+  hand.angle = cssAngle;
   hand.el.style.transitionDuration = `${V8_SPIN_EASE_MS}ms, 260ms, 260ms`;
   hand.el.style.transform = `rotate(${hand.angle}deg)`;
 }
@@ -147,11 +162,54 @@ function v8ApplyTime(date, keepGreen) {
   });
 }
 
+function v8DirectionPosition(nx, ny) {
+  if (V8_DIRECTION === 'rtl') return 1 - nx;
+  if (V8_DIRECTION === 'ttb') return ny;
+  if (V8_DIRECTION === 'btt') return 1 - ny;
+  return nx;
+}
+
+function v8PrepareGust() {
+  const cells = v8Cells();
+  if (!cells.length) return;
+
+  const centres = cells.map(cell => {
+    const rect = cell.getBoundingClientRect();
+    return {
+      cell,
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2
+    };
+  });
+
+  const xs = centres.map(item => item.x);
+  const ys = centres.map(item => item.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const spanX = Math.max(1, maxX - minX);
+  const spanY = Math.max(1, maxY - minY);
+
+  centres.forEach(({ cell, x, y }) => {
+    const nx = (x - minX) / spanX;
+    const ny = (y - minY) / spanY;
+    cell._v8Position = v8Clamp(v8DirectionPosition(nx, ny));
+    cell._v8StartAngles = (cell._hands || []).map(hand => {
+      const angle = Number.isFinite(hand.angle) ? hand.angle : 0;
+      return angle;
+    });
+  });
+}
+
 function v8Enter(elapsed) {
   v8Active = true;
   v8Resolving = false;
+  v8ResolveTarget = null;
   v8Start = performance.now() - elapsed;
   document.body.classList.add('v8-installation');
+  v8PrepareGust();
+
   v8Cells().forEach(cell => {
     cell._isActive = true;
     cell.classList.add('is-active');
@@ -160,18 +218,26 @@ function v8Enter(elapsed) {
 }
 
 function v8Spin(elapsed) {
-  const t = elapsed / 1000;
   const cells = v8Cells();
-  cells.forEach((cell, index) => {
-    const x = cell._windX ?? (index % 24);
-    const y = cell._windY ?? (index % 5);
-    const phase = cell._windPhase ?? 0;
-    const wave = 34 * Math.sin(t * 3.0 - x * 0.43);
-    const ripple = 15 * Math.sin(t * 4.4 + y * 0.86 + phase);
-    const front = 30 * Math.sin(t * 5.6 - x * 0.58);
-    v8SpinHand(cell._hands?.[0], V8_SPIN_STEP + wave + ripple + front);
-    v8SpinHand(cell._hands?.[1], V8_SPIN_STEP + wave - ripple + front);
+
+  cells.forEach(cell => {
+    const position = Number.isFinite(cell._v8Position) ? cell._v8Position : 0;
+    const delay = position * V8_GUST_TRAVEL_MS;
+    const localElapsed = elapsed - delay;
+    const progress = v8Clamp(localElapsed / V8_CELL_SPIN_MS);
+    const eased = v8EaseInOutSine(progress);
+
+    // One gentle rotation. Every clock uses the same curve; only the travel
+    // delay changes across the wall, making the gust read as one linked field.
+    const rotation = V8_ROTATION_DEG * eased;
+    const starts = cell._v8StartAngles || [0, 180];
+
+    v8DriveHand(cell._hands?.[0], (starts[0] || 0) + rotation);
+    v8DriveHand(cell._hands?.[1], (starts[1] || 0) + rotation);
+
     cell._isActive = true;
+    cell.classList.add('is-active');
+    cell.classList.remove('is-inactive');
   });
 }
 
@@ -179,14 +245,20 @@ function v8Resolve() {
   v8Resolving = true;
   const elapsed = performance.now() - v8Start;
   const remaining = Math.max(0, V8_DURATION_MS - elapsed);
-  v8ApplyTime(new Date(Date.now() + remaining), true);
+  v8ResolveTarget = new Date(Date.now() + remaining);
+  v8ApplyTime(v8ResolveTarget, true);
 }
 
 function v8Exit() {
   v8ApplyTime(new Date(), false);
   document.body.classList.remove('v8-installation');
+  v8Cells().forEach(cell => {
+    delete cell._v8Position;
+    delete cell._v8StartAngles;
+  });
   v8Active = false;
   v8Resolving = false;
+  v8ResolveTarget = null;
 }
 
 function v8Tick() {
@@ -195,8 +267,10 @@ function v8Tick() {
   if (state.active) {
     if (!v8Active) v8Enter(state.elapsed);
     const elapsed = V8_DEMO ? performance.now() - v8Start : state.elapsed;
+
     if (elapsed >= V8_RESOLVE_AT_MS) {
       if (!v8Resolving) v8Resolve();
+      else if (v8ResolveTarget) v8ApplyTime(v8ResolveTarget, true);
     } else {
       v8Spin(elapsed);
     }
