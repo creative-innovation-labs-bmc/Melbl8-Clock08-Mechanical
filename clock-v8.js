@@ -11,19 +11,22 @@ const debugMode = params.get('debug') === '1';
 const DEMO_MODE = params.get('demo') === '1';
 const GUST_DIRECTION = ['ltr', 'rtl', 'ttb', 'btt'].includes(params.get('dir')) ? params.get('dir') : 'ltr';
 
+/* V7 2x baseline. */
 const WIND_TICK_MS = 350;
 const WIND_TURN_MS = 1300;
 const ACTIVE_TURN_MS = 760;
 
+/* V8 five-minute installation event. */
 const EVENT_DURATION_MS = 10000;
 const EVENT_GUST_TRAVEL_MS = 1300;
 const EVENT_SPIN_MS = 5800;
-const EVENT_OUTRO_AT_MS = 7200;
+const EVENT_OUTRO_AT_MS = 6900;
 const EVENT_OUTRO_TRAVEL_MS = 1300;
-const EVENT_OUTRO_CELL_MS = 1400;
-const EVENT_DRIVE_MS = 180;
+const EVENT_OUTRO_CELL_MS = 1300;
+const EVENT_DRIVE_MS = 160;
 const EVENT_ROTATION_DEG = 360;
-const EVENT_TICK_MS = 90;
+const EVENT_COAST_DEG_PER_MS = 0.024; // 24 degrees/sec: no pause before the outro front arrives.
+const EVENT_TICK_MS = 70;
 const DEMO_START = performance.now();
 
 const DIGIT_PATTERNS = {
@@ -61,14 +64,13 @@ let lastSecond = -1;
 let lastWindAt = 0;
 let eventActive = false;
 let eventStartPerf = 0;
-let eventTargetDate = null;
 
 function fitStage() {
   const scale = Math.min(window.innerWidth / DISPLAY_W, window.innerHeight / DISPLAY_H);
   stage.style.transform = `translate(-50%, -50%) scale(${scale})`;
   if (debugMode) {
     debug.hidden = false;
-    debug.textContent = `${window.innerWidth}x${window.innerHeight} | scale ${scale.toFixed(4)} | V8 standalone linked gust`;
+    debug.textContent = `${window.innerWidth}x${window.innerHeight} | scale ${scale.toFixed(4)} | V8 continuous outro`;
   }
 }
 window.addEventListener('resize', fitStage, { passive: true });
@@ -129,15 +131,18 @@ function clamp(value, min = 0, max = 1) { return Math.max(min, Math.min(max, val
 function easeInOutSine(t) { return -(Math.cos(Math.PI * t) - 1) / 2; }
 function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
 
+function initialiseHand(hand) {
+  if (hand.ready) return;
+  hand.el.style.transition = 'none';
+  hand.el.style.transform = `rotate(${hand.angle}deg)`;
+  hand.el.offsetWidth;
+  hand.el.style.transition = '';
+  hand.ready = true;
+}
+
 function setHand(hand, targetClockAngle, immediate = false) {
+  initialiseHand(hand);
   const target = toCssAngle(targetClockAngle);
-  if (!hand.ready) {
-    hand.el.style.transition = 'none';
-    hand.el.style.transform = `rotate(${hand.angle}deg)`;
-    hand.el.offsetWidth;
-    hand.el.style.transition = '';
-    hand.ready = true;
-  }
   if (immediate) {
     hand.angle = target;
     hand.el.style.transition = 'none';
@@ -146,17 +151,22 @@ function setHand(hand, targetClockAngle, immediate = false) {
     hand.el.style.transition = '';
     return;
   }
-  const delta = normaliseDelta(target - hand.angle);
-  hand.angle += delta;
+  hand.angle += normaliseDelta(target - hand.angle);
   hand.el.style.transform = `rotate(${hand.angle}deg)`;
 }
 
 function driveHandAbsolute(hand, cssAngle) {
   if (!hand) return;
-  hand.ready = true;
+  initialiseHand(hand);
   hand.angle = cssAngle;
   setTurnDuration(hand, EVENT_DRIVE_MS);
   hand.el.style.transform = `rotate(${cssAngle}deg)`;
+}
+
+function forwardEquivalent(fromAngle, targetCssAngle) {
+  let target = targetCssAngle;
+  while (target < fromAngle) target += 360;
+  return target;
 }
 
 function isOn(pattern, row, col) {
@@ -182,6 +192,23 @@ function chooseDirections(pattern, row, col) {
   if (dirs.includes(180) && dirs.includes(270)) return [180, 270];
   if (dirs.includes(270) && dirs.includes(0)) return [270, 0];
   return [dirs[0], dirs[1]];
+}
+
+function getTimeParts(date = new Date()) {
+  const values = Object.create(null);
+  for (const part of TIME_FORMATTER.formatToParts(date)) {
+    if (part.type !== 'literal') values[part.type] = part.value;
+  }
+  return {
+    hh: values.hour.padStart(2, '0'),
+    mm: values.minute.padStart(2, '0'),
+    ss: values.second.padStart(2, '0')
+  };
+}
+
+function updateEdgeText(now) {
+  edgeLeft.textContent = `${now.hh}:${now.mm}:${now.ss} · ${DATE_FORMATTER.format(new Date())}`;
+  edgeRight.textContent = `${WEATHER_LOCATION} · ${WEATHER_TEMP} · ${WEATHER_TEXT}`;
 }
 
 function normalWindAngle(cell, seconds) {
@@ -246,23 +273,6 @@ function setColon(colonEl, second, immediate = false) {
   colonEl._cells.forEach(cell => applyNormalCell(cell, pair, immediate));
 }
 
-function getTimeParts(date = new Date()) {
-  const values = Object.create(null);
-  for (const part of TIME_FORMATTER.formatToParts(date)) {
-    if (part.type !== 'literal') values[part.type] = part.value;
-  }
-  return {
-    hh: values.hour.padStart(2, '0'),
-    mm: values.minute.padStart(2, '0'),
-    ss: values.second.padStart(2, '0')
-  };
-}
-
-function updateEdgeText(now) {
-  edgeLeft.textContent = `${now.hh}:${now.mm}:${now.ss} · ${DATE_FORMATTER.format(new Date())}`;
-  edgeRight.textContent = `${WEATHER_LOCATION} · ${WEATHER_TEMP} · ${WEATHER_TEXT}`;
-}
-
 function updateNormalClock(force = false) {
   const now = getTimeParts();
   const six = `${now.hh}${now.mm}${now.ss}`;
@@ -286,6 +296,28 @@ function updateNormalWind() {
   }
 }
 
+function targetForTime(date) {
+  const now = getTimeParts(date);
+  const six = `${now.hh}${now.mm}${now.ss}`;
+  const targets = new Map();
+  digitEls.forEach((digit, digitIndex) => {
+    const pattern = DIGIT_PATTERNS[six[digitIndex]];
+    let index = 0;
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 3; col++) {
+        const dirs = chooseDirections(pattern, row, col);
+        targets.set(digit._cells[index], { dirs: dirs || [0, 180], active: !!dirs });
+        index += 1;
+      }
+    }
+  });
+  const pair = Number(now.ss) % 2 === 0 ? [0, 180] : [90, 270];
+  colonEls.forEach(colon => {
+    colon._cells.forEach(cell => targets.set(cell, { dirs: pair, active: true }));
+  });
+  return targets;
+}
+
 function eventWindow() {
   if (DEMO_MODE) {
     const elapsed = performance.now() - DEMO_START;
@@ -293,9 +325,8 @@ function eventWindow() {
   }
   const now = getTimeParts();
   const second = Number(now.ss);
-  const active = Number(now.mm) % 5 === 0 && second < 10;
   return {
-    active,
+    active: Number(now.mm) % 5 === 0 && second < 10,
     elapsed: second * 1000 + (Date.now() % 1000)
   };
 }
@@ -311,44 +342,12 @@ function allCells() {
   return Array.from(document.querySelectorAll('.clock-cell'));
 }
 
-function forwardEquivalent(fromAngle, targetCssAngle) {
-  let target = targetCssAngle;
-  while (target < fromAngle) target += 360;
-  return target;
-}
-
-function targetForTime(date) {
-  const now = getTimeParts(date);
-  const six = `${now.hh}${now.mm}${now.ss}`;
-  const targets = new Map();
-
-  digitEls.forEach((digit, digitIndex) => {
-    const pattern = DIGIT_PATTERNS[six[digitIndex]];
-    let index = 0;
-    for (let row = 0; row < 5; row++) {
-      for (let col = 0; col < 3; col++) {
-        const dirs = chooseDirections(pattern, row, col);
-        targets.set(digit._cells[index], { dirs: dirs || [0, 180], active: !!dirs });
-        index += 1;
-      }
-    }
-  });
-
-  const pair = Number(now.ss) % 2 === 0 ? [0, 180] : [90, 270];
-  colonEls.forEach(colon => {
-    colon._cells.forEach(cell => targets.set(cell, { dirs: pair, active: true }));
-  });
-  return targets;
-}
-
 function prepareEvent(elapsed) {
   eventActive = true;
   eventStartPerf = performance.now() - elapsed;
-  eventTargetDate = new Date(Date.now() + Math.max(0, EVENT_DURATION_MS - elapsed));
   document.body.classList.add('v8-installation');
 
   const cells = allCells();
-  const targetMap = targetForTime(eventTargetDate);
   const centres = cells.map(cell => {
     const rect = cell.getBoundingClientRect();
     return { cell, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
@@ -366,15 +365,11 @@ function prepareEvent(elapsed) {
     const delay = position * EVENT_GUST_TRAVEL_MS;
     const progressAtEntry = clamp((elapsed - delay) / EVENT_SPIN_MS);
     const rotationAtEntry = EVENT_ROTATION_DEG * easeInOutSine(progressAtEntry);
-
     cell._v8Position = position;
     cell._v8StartAngles = cell._hands.map(hand => (Number.isFinite(hand.angle) ? hand.angle : 0) - rotationAtEntry);
     cell._v8SpinEndAngles = cell._v8StartAngles.map(angle => angle + EVENT_ROTATION_DEG);
-    const target = targetMap.get(cell) || { dirs: [0, 180], active: false };
-    cell._v8Target = target;
-    cell._v8TargetAngles = target.dirs.map((clockAngle, i) =>
-      forwardEquivalent(cell._v8SpinEndAngles[i], toCssAngle(clockAngle))
-    );
+    cell._v8ReleaseStarted = false;
+    cell._v8Released = false;
   });
 }
 
@@ -383,67 +378,115 @@ function setEventColour(cell, green) {
   cell.classList.toggle('is-inactive', !green);
 }
 
+function coastAngle(cell, handIndex, elapsed) {
+  const position = cell._v8Position || 0;
+  const gustDelay = position * EVENT_GUST_TRAVEL_MS;
+  const spinEndAt = gustDelay + EVENT_SPIN_MS;
+  if (elapsed <= spinEndAt) {
+    const p = clamp((elapsed - gustDelay) / EVENT_SPIN_MS);
+    return cell._v8StartAngles[handIndex] + EVENT_ROTATION_DEG * easeInOutSine(p);
+  }
+  return cell._v8SpinEndAngles[handIndex] + (elapsed - spinEndAt) * EVENT_COAST_DEG_PER_MS;
+}
+
+function driveReleasedCell(cell, target) {
+  cell._normalActive = target.active;
+  setEventColour(cell, target.active);
+
+  if (target.active) {
+    setTurnDuration(cell._hands[0], ACTIVE_TURN_MS);
+    setTurnDuration(cell._hands[1], ACTIVE_TURN_MS);
+    setHand(cell._hands[0], target.dirs[0], false);
+    setHand(cell._hands[1], target.dirs[1], false);
+  } else if (cell._canDrift) {
+    moveInactiveWithNormalWind(cell, false);
+  } else {
+    setTurnDuration(cell._hands[0], ACTIVE_TURN_MS);
+    setTurnDuration(cell._hands[1], ACTIVE_TURN_MS);
+    setHand(cell._hands[0], target.dirs[0], false);
+    setHand(cell._hands[1], target.dirs[1], false);
+  }
+}
+
 function driveEvent(elapsed) {
+  const liveDate = new Date();
+  const liveTargets = targetForTime(liveDate);
+  const now = getTimeParts(liveDate);
+  if (Number(now.ss) !== lastSecond) {
+    lastSecond = Number(now.ss);
+    updateEdgeText(now);
+  }
+
   for (const cell of allCells()) {
     const position = cell._v8Position || 0;
     const gustDelay = position * EVENT_GUST_TRAVEL_MS;
-    const spinProgress = clamp((elapsed - gustDelay) / EVENT_SPIN_MS);
 
     if (elapsed < EVENT_OUTRO_AT_MS) {
       const gustHasArrived = elapsed >= gustDelay;
       setEventColour(cell, gustHasArrived ? true : cell._normalActive);
-
       if (gustHasArrived) {
-        const rotation = EVENT_ROTATION_DEG * easeInOutSine(spinProgress);
-        driveHandAbsolute(cell._hands[0], cell._v8StartAngles[0] + rotation);
-        driveHandAbsolute(cell._hands[1], cell._v8StartAngles[1] + rotation);
+        driveHandAbsolute(cell._hands[0], coastAngle(cell, 0, elapsed));
+        driveHandAbsolute(cell._hands[1], coastAngle(cell, 1, elapsed));
       }
       continue;
     }
 
     const outroDelay = position * EVENT_OUTRO_TRAVEL_MS;
     const localOutro = elapsed - EVENT_OUTRO_AT_MS - outroDelay;
-    const outroProgress = clamp(localOutro / EVENT_OUTRO_CELL_MS);
 
     if (localOutro < 0) {
-      driveHandAbsolute(cell._hands[0], cell._v8SpinEndAngles[0]);
-      driveHandAbsolute(cell._hands[1], cell._v8SpinEndAngles[1]);
+      // Keep moving while waiting for the left-to-right release front.
+      driveHandAbsolute(cell._hands[0], coastAngle(cell, 0, elapsed));
+      driveHandAbsolute(cell._hands[1], coastAngle(cell, 1, elapsed));
       setEventColour(cell, true);
       continue;
     }
 
-    const eased = easeOutCubic(outroProgress);
-    driveHandAbsolute(
-      cell._hands[0],
-      cell._v8SpinEndAngles[0] + (cell._v8TargetAngles[0] - cell._v8SpinEndAngles[0]) * eased
-    );
-    driveHandAbsolute(
-      cell._hands[1],
-      cell._v8SpinEndAngles[1] + (cell._v8TargetAngles[1] - cell._v8SpinEndAngles[1]) * eased
-    );
+    const target = liveTargets.get(cell) || { dirs: [0, 180], active: false };
 
-    if (outroProgress >= 0.48) {
-      setEventColour(cell, cell._v8Target.active);
-    } else {
-      setEventColour(cell, true);
+    if (!cell._v8ReleaseStarted) {
+      cell._v8ReleaseStarted = true;
+      cell._v8ReleaseStartAngles = cell._hands.map(hand => hand.angle);
     }
+
+    const progress = clamp(localOutro / EVENT_OUTRO_CELL_MS);
+    if (progress < 1) {
+      const eased = easeOutCubic(progress);
+      for (let i = 0; i < 2; i++) {
+        const start = cell._v8ReleaseStartAngles[i];
+        const targetAngle = forwardEquivalent(start, toCssAngle(target.dirs[i]));
+        driveHandAbsolute(cell._hands[i], start + (targetAngle - start) * eased);
+      }
+      // The same release front that restores live time also restores the
+      // green/grey state, instead of switching the whole field at once.
+      setEventColour(cell, progress < 0.42 ? true : target.active);
+      continue;
+    }
+
+    cell._v8Released = true;
+    driveReleasedCell(cell, target);
   }
 }
 
 function finishEvent() {
+  // By the last half-second every cell is already following live time, so
+  // leaving the installation state does not issue a second set of targets.
+  const now = getTimeParts();
+  const six = `${now.hh}${now.mm}${now.ss}`;
+  for (let i = 0; i < 6; i++) currentDigits[i] = six[i];
+  lastSecond = Number(now.ss);
+  updateEdgeText(now);
+
   document.body.classList.remove('v8-installation');
   for (const cell of allCells()) {
     delete cell._v8Position;
     delete cell._v8StartAngles;
     delete cell._v8SpinEndAngles;
-    delete cell._v8Target;
-    delete cell._v8TargetAngles;
+    delete cell._v8ReleaseStarted;
+    delete cell._v8ReleaseStartAngles;
+    delete cell._v8Released;
   }
   eventActive = false;
-  eventTargetDate = null;
-  currentDigits.fill('');
-  lastSecond = -1;
-  updateNormalClock(false);
   updateNormalWind();
   lastWindAt = performance.now();
 }
@@ -476,17 +519,11 @@ function mainLoop() {
     return;
   }
 
-  const windowState = eventWindow();
-
-  if (windowState.active) {
-    if (!eventActive) prepareEvent(windowState.elapsed);
-    const elapsed = DEMO_MODE ? performance.now() - eventStartPerf : windowState.elapsed;
+  const state = eventWindow();
+  if (state.active) {
+    if (!eventActive) prepareEvent(state.elapsed);
+    const elapsed = DEMO_MODE ? performance.now() - eventStartPerf : state.elapsed;
     driveEvent(elapsed);
-    const now = getTimeParts();
-    if (Number(now.ss) !== lastSecond) {
-      lastSecond = Number(now.ss);
-      updateEdgeText(now);
-    }
   } else {
     if (eventActive) finishEvent();
     updateNormalClock(false);
